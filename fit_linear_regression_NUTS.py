@@ -82,14 +82,14 @@ def my_likelihood(theta, obs, sigma):
     in theta
     """
 
-    model = run_and_unpack_cable(theta)
+    mod = linear_model(theta)
 
     return -(0.5/sigma**2)*np.sum((obs - model)**2)
     #return np.sum(-(0.5/sigma**2)*np.sum((obs - model)**2))
 
 def my_loglikelihood(theta, obs, sigma):
 
-    model = run_and_unpack_cable(theta)
+    mod = linear_model(theta)
 
     return -np.sum(0.5 * \
             (np.log(2. * np.pi * sigma ** 2.) + ((obs - model) / sigma) ** 2))
