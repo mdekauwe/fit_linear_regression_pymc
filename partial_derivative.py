@@ -15,6 +15,7 @@ __version__ = "1.0 (03.01.2020)"
 __email__ = "mdekauwe@gmail.com"
 
 import numpy as np
+import warnings
 
 def gradients(vals, func, releps=1e-3, abseps=None, mineps=1e-9, reltol=1e-3,
               epsscale=0.5):

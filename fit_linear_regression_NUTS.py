@@ -27,7 +27,7 @@ import matplotlib.pyplot as plt
 import theano
 import theano.tensor as tt
 import numpy as np
-
+import warnings
 
 from blackbox_log_likelihood import LogLikeWithGrad, LogLikeGrad
 

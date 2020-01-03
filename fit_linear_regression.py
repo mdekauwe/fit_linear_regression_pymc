@@ -24,6 +24,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import theano
 import theano.tensor as tt
+import warnings
 
 @theano.as_op(itypes=[tt.dscalar, tt.dscalar], otypes=[tt.dvector])
 def linear_model(intercept, slope):
