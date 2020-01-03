@@ -105,7 +105,6 @@ class LogLikeGrad(tt.Op):
         def lnlike(values):
             return self.likelihood(values, self.x, self.data, self.sigma)
 
-            logl = self.likelihood(theta, self.obs, self.sigma)
         # calculate gradients
         grads = gradients(theta, lnlike)
 
