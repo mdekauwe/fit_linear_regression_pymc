@@ -72,18 +72,16 @@ with pm.Model() as model:
     intercept = pm.Normal('intercept', mu=0.0, sigma=20.0)
     slope = pm.Normal('slope', mu=0.0, sigma=20.0)
 
-    # Define likelihood
-    mod = linear_model(intercept, slope)
-    likelihood = pm.Normal('y_obs', mu=mod, sd=sigma, observed=obs)
+    theta = tt.as_tensor_variable([sigma, intercept, slope])
+
+    # use a DensityDist (use a lamdba function to "call" the Op)
+    pm.DensityDist('likelihood', lambda v: logl(v), observed={'v': theta})
 
     # Inference
-
-    # The NUTS won't work with the "blackbox" model setup like this as it
-    # doesn't have a gradient, so we can only use Slice or Metropolis...
-    #step = pm.NUTS() # Hamiltonian MCMC with No U-Turn Sampler -
-
+    step = pm.NUTS() # Hamiltonian MCMC with No U-Turn Sampler
     #step = pm.Slice()
-    step = pm.Metropolis()
+    #step = pm.Metropolis()
+
     trace = pm.sample(10000, step=step, cores=3, progressbar=True)
 
 plt.figure(figsize=(7, 7))
