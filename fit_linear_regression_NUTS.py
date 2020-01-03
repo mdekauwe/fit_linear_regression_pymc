@@ -82,14 +82,14 @@ def my_likelihood(theta, obs, sigma):
     in theta
     """
 
-    mod = linear_model(theta)
+    model = linear_model(theta)
 
     return -(0.5/sigma**2)*np.sum((obs - model)**2)
     #return np.sum(-(0.5/sigma**2)*np.sum((obs - model)**2))
 
 def my_loglikelihood(theta, obs, sigma):
 
-    mod = linear_model(theta)
+    model = linear_model(theta)
 
     return -np.sum(0.5 * \
             (np.log(2. * np.pi * sigma ** 2.) + ((obs - model) / sigma) ** 2))
@@ -103,7 +103,7 @@ def linear_model(theta):
     x = np.linspace(0, 1, size)
 
     y = slope * x + intercept
-    y = y.astype(np.float64)
+    #y = y.astype(np.float64)
 
     return y
 
@@ -119,10 +119,10 @@ truth = slope * x + intercept
 
 # add noise
 obs = truth + np.random.normal(scale=.5, size=size)
-obs = obs.astype(np.float64)
+#obs = obs.astype(np.float64)
 
 uncert = 0.1 * np.abs(obs)
-uncert = uncert.astype(np.float64)
+#uncert = uncert.astype(np.float64)
 
 
 #fig = plt.figure(figsize=(6, 6))
