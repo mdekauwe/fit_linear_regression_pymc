@@ -3,8 +3,8 @@
 """
 Fit linear regression...
 
-The NUTS sampler does not work when we specify our own "blackbox" model, follow
-this blog to get around the need for a gradient...
+The NUTS sampler does not work when we specify our own "blackbox" model,
+following this blog to get around the need for a gradient ...
 
 https://docs.pymc.io/notebooks/blackbox_external_likelihood.html
 
@@ -20,35 +20,27 @@ __author__ = "Martin De Kauwe"
 __version__ = "1.0 (03.01.2020)"
 __email__ = "mdekauwe@gmail.com"
 
-
 import os
 import sys
-import numpy as np
 import pymc3 as pm
 import matplotlib.pyplot as plt
 import pandas as pd
 import theano
 import theano.tensor as tt
+import cython
 
+from partial_derivative import gradients
 
-class LogLike(tt.Op):
+# define a theano Op for our likelihood function
+class LogLikeWithGrad(tt.Op):
 
-    """
-    Specify what type of object will be passed and returned to the Op when it is
-    called. In our case we will be passing it a vector of values (the parameters
-    that define our model) and returning a single "scalar" value (the
-    log-likelihood)
-    """
     itypes = [tt.dvector] # expects a vector of parameter values when called
-    #otypes = [tt.dscalar] # outputs a single scalar value (the log likelihood)
-    otypes = [tt.dvector] # outputs a vector for the log likelihood)
+    otypes = [tt.dscalar] # outputs a single scalar value (the log likelihood)
 
-
-    def __init__(self, loglike, obs, sigma):
+    def __init__(self, loglike, data, x, sigma):
         """
-        Initialise the Op with various things that our log-likelihood function
-        requires. Below are the things that are needed in this particular
-        example.
+        Initialise with various things that the function requires. Below
+        are the things that are needed in this particular example.
 
         Parameters
         ----------
@@ -59,48 +51,97 @@ class LogLike(tt.Op):
         x:
             The dependent variable (aka 'x') that our model requires
         sigma:
-            The noise standard deviation that our function requires.
+            The noise standard deviation that out function requires.
         """
 
         # add inputs as class attributes
         self.likelihood = loglike
-        self.obs = obs
+        self.data = data
+        self.x = x
         self.sigma = sigma
+
+        # initialise the gradient Op (below)
+        self.logpgrad = LogLikeGrad(self.likelihood, self.data, self.x,
+                                    self.sigma)
 
     def perform(self, node, inputs, outputs):
         # the method that is used when calling the Op
         theta, = inputs  # this will contain my variables
 
         # call the log-likelihood function
-        logl = self.likelihood(theta, self.obs, self.sigma)
+        logl = self.likelihood(theta, self.x, self.data, self.sigma)
 
         outputs[0][0] = np.array(logl) # output the log-likelihood
 
-def my_likelihood(theta, obs, sigma):
+    def grad(self, inputs, g):
+        # the method that calculates the gradients - it actually returns the
+        # vector-Jacobian product - g[0] is a vector of parameter values
+        theta, = inputs  # our parameters
+        return [g[0]*self.logpgrad(theta)]
+
+
+class LogLikeGrad(tt.Op):
+
+    """
+    This Op will be called with a vector of values and also return a vector of
+    values - the gradients in each dimension.
+    """
+    itypes = [tt.dvector]
+    otypes = [tt.dvector]
+
+    def __init__(self, loglike, data, x, sigma):
+        """
+        Initialise with various things that the function requires. Below
+        are the things that are needed in this particular example.
+
+        Parameters
+        ----------
+        loglike:
+            The log-likelihood (or whatever) function we've defined
+        data:
+            The "observed" data that our log-likelihood function takes in
+        x:
+            The dependent variable (aka 'x') that our model requires
+        sigma:
+            The noise standard deviation that out function requires.
+        """
+
+        # add inputs as class attributes
+        self.likelihood = loglike
+        self.data = data
+        self.x = x
+        self.sigma = sigma
+
+    def perform(self, node, inputs, outputs):
+        theta, = inputs
+
+        # define version of likelihood function to pass to derivative function
+        def lnlike(values):
+            return self.likelihood(values, self.x, self.data, self.sigma)
+
+            logl = self.likelihood(theta, self.obs, self.sigma)
+        # calculate gradients
+        grads = gradients(theta, lnlike)
+
+        outputs[0][0] = grads
+
+
+def my_likelihood(theta, x, obs, sigma):
     """
     A Gaussian log-likelihood function for a model with parameters given
     in theta
     """
 
-    model = linear_model(theta)
+    model = linear_model(x, theta)
 
-    return -(0.5/sigma**2)*np.sum((obs - model)**2)
-    #return np.sum(-(0.5/sigma**2)*np.sum((obs - model)**2))
+    return np.sum( -(0.5/sigma**2)*np.sum((obs - model)**2) )
 
-def my_loglikelihood(theta, obs, sigma):
+def linear_model(x, theta):
 
-    model = linear_model(theta)
-
-    return -np.sum(0.5 * \
-            (np.log(2. * np.pi * sigma ** 2.) + ((obs - model) / sigma) ** 2))
-
-def linear_model(theta):
-
+    """
+    This could be any model...
+    """
     intercept, slope = theta  # unpack line gradient and intercept
-
-    # figure out how to pass
-    size = 200
-    x = np.linspace(0, 1, size)
 
     y = slope * x + intercept
     #y = y.astype(np.float64)
@@ -132,8 +173,11 @@ uncert = 0.1 * np.abs(obs)
 #plt.legend(loc=0)
 #plt.show()
 
-logl = LogLike(my_likelihood, obs, uncert)
+# create our Op
+logl = LogLikeWithGrad(my_likelihood, obs, x, uncert)
 
+ndraws = 3000  # number of draws from the distribution
+nburn = 1000   # number of "burn-in points" (which we'll discard)
 
 with pm.Model() as model:
 
@@ -141,6 +185,7 @@ with pm.Model() as model:
     intercept = pm.Normal('intercept', mu=0.0, sigma=20.0)
     slope = pm.Normal('slope', mu=0.0, sigma=20.0)
 
+    # convert to tensor vectors
     theta = tt.as_tensor_variable([intercept, slope])
 
     # use a DensityDist (use a lamdba function to "call" the Op)
@@ -150,8 +195,7 @@ with pm.Model() as model:
     step = pm.NUTS() # Hamiltonian MCMC with No U-Turn Sampler
     #step = pm.Slice()
     #step = pm.Metropolis()
-
-    trace = pm.sample(1000, step=step, cores=2, progressbar=True)
+    trace = pm.sample(ndraws, tune=nburn, discard_tuned_samples=True)
 
 plt.figure(figsize=(7, 7))
 pm.traceplot(trace[100:])
